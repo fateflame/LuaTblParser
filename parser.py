@@ -12,31 +12,52 @@ class element:
         return self.string
 
     def get_pair(self):
+        # 如果类型显示为可转为key-value的键值对，则输出[key,value]
+        # 转换失败时抛出异常
         if not self.is_pair:
             raise TypeError("cannot converse a non-pair object to a key-value pair")
         else:
-            key_pattern = "\A[ ]*(?P<total>(?P<brace>\[[\'\"])?(?P<key>[\w_. ]+)(?(brace)[\'\"]\]))[ ]*="
-            val_pattern = '=[ ]*(?P<val>(.*?))[ ]*\Z'
-            m = re.match(pattern=key_pattern, string=self.string)
-            value = re.search(pattern=val_pattern, string=self.string)
-            if not m or not value:           # m==None||value==None
-                raise ValueError("incorrect lua table construction")
-            else:
-                keyword = m.group("key")
-                value = value.group("val")
-                if m.group("total") == m.group("key"):         # 不带有方括号：'["..."]'，有方括号时，空格当做字符处理
-                    # 判断key中间是否有空格
-                    keyword = self.__romove_space(keyword)      # 删除首尾空格
-                    if re.search(pattern=" ", string=keyword):      # 形如{a b}为非法构造式，分隔符必须为,或；
-                        raise ValueError("incorrect lua table construction")
-                return keyword, value
+            key_value_pattern = "\A(?P<key>(.*?))=(?P<value>(.*?))\Z"
+            m = re.search(pattern=key_value_pattern, string=self.string)
+            # 返回等号两侧去除首尾空格后的字符串
+            rough_key = self.__remove_space(m.group("key"))
+            rough_value = self.__remove_brackets(m.group("value"))
+
+
 
     @staticmethod
-    def __romove_space(string):
+    def __remove_space(string):
         # 去除字符串首尾的空格
         patt_str = "\A[ ]*(?P<str>(.*?))[ ]*\Z"
         return re.match(pattern=patt_str, string=string).group("str")
 
+    @staticmethod
+    def __remove_brackets(string):
+        # 输入一串个字符串，检测头尾是否含有成对的中括号[]（只适用于key值外侧）
+        # 如果有，则返回移除一对括号后的字符串，否则返回None
+        # 如果两侧括号不匹配，抛出异常
+        if string[0] == '[':
+            if string[string.__len__()-1] == ']':
+                # 去除头尾的括号对后返回
+                return string[1:string.__len__()-1]
+            else:
+                raise ValueError("incorrect lua table construction")
+        else:       # 没有括号则直接返回
+            return None
+
+    @staticmethod
+    def __remove_quotations(string):
+        # 输入一串个字符串，检测头尾是否含有成对的引号（只适用于str值）
+        # 如果有，则返回移除一对引号后的字符串，否则返回None
+        # 如果两侧引号不匹配，抛出异常
+        if string[0] == '\'':
+            if string[string.__len__()-1] == ']':
+                # 去除头尾的括号对后返回
+                return string[1:string.__len__()-1]
+            else:
+                raise ValueError("incorrect lua table construction")
+        else:       # 没有引号则直接返回
+            return None
 
 class LuaTable:
     TblType = Enum('type', ('list', 'dict'))
@@ -104,10 +125,10 @@ class LuaTable:
 if __name__ == "__main__":
     patt_key = "[ ]*(?P<total>(?P<brace>\[[\'\"])?(?P<main>[\w_. ]+)(?(brace)[\'\"]\]))[ ]*="
     string ='arrayff = {65,23,5,}'
-    m =re.match(patt_key, string)
-    keyword = m.group("main")
-    val_pattern = '=[ ]*(?P<val>(.*?))[ ]*\Z'
-    print(element('["a "] =1 ', True).get_pair())
+    key_value_pattern = "\A(?P<key>(.*?))=(?P<value>(.*?))\Z"
+    m = re.search(pattern=key_value_pattern, string=string)
+    print(m.group("key").__len__())
+    print(m.group("value"))
 
     test_str = '{array = {65,23,5,},dict = {mixed = {43,54.33,false,9,string = "value",},array = {3,6,4,},string = "value",},}'
     e = LuaTable.split(test_str)
