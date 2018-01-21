@@ -22,6 +22,10 @@ class element:
             # 返回等号两侧去除首尾空格后的字符串
             rough_key = self.__remove_space(m.group("key"))
             rough_value = self.__remove_brackets(m.group("value"))
+            # TODO key没有[]则判断为字符串，去除两端空格后使用（判断中间是否有空格）。
+            # TODO 有则进一步判断是否有“”，有引号则判断为字符串，否则是数字或bool
+            # TODO value 没有{}则判断为一般类型（字符串，数字，bool）
+            # TODO 有则递归构建table
 
 
 
