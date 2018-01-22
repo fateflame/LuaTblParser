@@ -21,9 +21,9 @@ class element:
             m = re.search(pattern=key_value_pattern, string=self.string)
             # 返回等号两侧去除首尾空格后的字符串
             rough_key = self.__remove_space(m.group("key"))
+            value = self.__parser_value(rough_value)
             rough_value = self.__remove_space(m.group("value"))
             key = self.__parser_key(rough_key)
-            value = self.__parser_value(rough_value)
             return key, value
 
     @staticmethod
