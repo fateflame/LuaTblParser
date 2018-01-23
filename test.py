@@ -1,6 +1,6 @@
 import re
-
-s = "abc"
-s1 = s
-s = "abcd"
-print(s1)
+import string
+f=open('./case.lua')
+s = '"a\"b"'
+f.close()
+print(s[0], s[1], s[2])
