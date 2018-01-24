@@ -1,6 +1,7 @@
 import re
 import string
 f=open('./case.lua')
-s = '"a\"b"'
+s = f.read()
 f.close()
-print(s[0], s[1], s[2])
+begin = 477
+print(begin is 477)
