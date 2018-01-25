@@ -5,13 +5,12 @@ class PyLuaTblParser:
         self.string = ""
 
     def load(self, s):
-        self.string = s.strip()      # remove the space characters
-        str_length = self.string.__len__()
-        if self.string[0] != '{' or self.string[str_length-1] != '}':
+        self.string = s
+        p = self.skip(s, 0)
+        if self.string[p] != '{':
             raise ValueError("incorrect lua table construction")
-
-        p = 1           # skip the first '{'
-        while p < str_length-1:
+        p += 1           # skip the first '{'
+        while p < self.string.__len__():
             e = self.__next_element(self.string, p)
 
     @staticmethod
@@ -21,13 +20,8 @@ class PyLuaTblParser:
         # end表示该字符串结束的后一位
         # 若不存在则返回None
         while begin < string.__len__()-1:
-            if string[begin] == ' ':
-                begin += 1
-                continue
-            elif string[begin] == '-':
-                begin = PyLuaTblParser.__get_comment(string, begin)
-                continue
-            elif string[begin] == '{':        # dict直接作为value
+            begin = PyLuaTblParser.skip(string, begin)
+            if string[begin] == '{':        # dict直接作为value
                 ptr = PyLuaTblParser.__get_brace(string, begin)
                 return PyLuaTblParser().load(string[begin:ptr+1]), ptr+1
             elif string[begin] == '\'' or string[begin] =='\"':       # str直接作为value
@@ -77,28 +71,40 @@ class PyLuaTblParser:
 
     @staticmethod
     def __get_comment(string, begin):
-        # precondition: string[begin] == '-'
+        # precondition: string[begin:begin+2] == '--'
         # 返回注释结束的后一个字符所在的序号
-        if string[begin] != '-':
+        if string[begin:begin+2] != '--':
             raise ValueError("cannot find start '-' at the given position")
-        if string[begin: begin + 2] == '--':  # 注释
-            if string[begin: begin + 4] == '--[[':  # 多行注释
-                begin += 4  # skip '--[['
-                while string[begin: begin + 2] != ']]':  # 以']]'结束，注释内部不需要担心引号
-                    if begin >= string.__len__() - 1:  # 注释结束前没有遇到结束符
-                        raise ValueError("incorrect lua table construction")
-                    begin += 1
-                begin += 2  # skip ']]'
-            else:  # 单行注释
-                begin += 2  # skip '--'
-                while string[begin] != '\t':  # 以换行符结束
-                    if begin >= string.__len__() - 1:  # 注释结束前没有遇到结束符
-                        raise ValueError("incorrect lua table construction")
-                    begin += 1
-                begin += 1  # skip '\t'
-            return begin
-        else:  # '-'单独出现作为减号
-            return begin+1
+        if string[begin: begin + 4] == '--[[':  # 多行注释
+            begin += 4  # skip '--[['
+            while string[begin: begin + 2] != ']]':  # 以']]'结束，注释内部不需要担心引号
+                if begin >= string.__len__() - 1:  # 注释结束前没有遇到结束符
+                    raise ValueError("incorrect lua table construction")
+                begin += 1
+            begin += 2  # skip ']]'
+        else:  # 单行注释
+            begin += 2  # skip '--'
+            while string[begin] != '\n':  # 以换行符结束
+                if begin >= string.__len__() - 1:  # 注释结束前没有遇到结束符
+                    raise ValueError("incorrect lua table construction")
+                begin += 1
+            begin += 1  # skip '\t'
+        return begin
+
+    @staticmethod
+    def skip(string, begin):        #pass test
+        # 从给定位置开始，跳过遇到的空格和注释，返回跳过后的第一个有效字符
+        while begin < string.__len__():
+            if string[begin] == ' ':
+                begin += 1
+                continue
+            if string[begin: begin+2] == '--':
+                begin = PyLuaTblParser.__get_comment(string, begin)
+            else:
+                break
+        return begin
+
+
 
     @staticmethod
     def __get_quotation(string, begin):     #pass test
@@ -139,6 +145,8 @@ class PyLuaTblParser:
 
 if __name__ == "__main__":
     f = open('./case.lua')
-    s = f.read().strip()
+    s1 = f.read()
+    s = "  --ll\n kjf"
     f.close()
-    temp = PyLuaTblParser._PyLuaTblParser__next_element(s, 1)
+    temp = PyLuaTblParser.skip(s, 0)
+    print(s[temp:s.__len__()])
