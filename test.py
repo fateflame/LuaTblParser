@@ -1,7 +1,12 @@
 import re
 import string
-f=open('./case.lua')
-s = f.read()
-f.close()
-begin = 477
-print(begin is 477)
+class LuaError(Exception):
+    def __init__(self, s):
+        self.error_mesg = s
+
+    def __str__(self):
+        return self.error_mesg
+
+if __name__ == "__main__":
+    s = False
+    print(s is True or s is False)
