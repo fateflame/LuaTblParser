@@ -8,5 +8,5 @@ class LuaError(Exception):
         return self.error_mesg
 
 if __name__ == "__main__":
-    s = False
-    print(s is True or s is False)
+    s= '{"array with 1 element",}'
+    print(s[1].isspace())
