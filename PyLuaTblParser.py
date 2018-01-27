@@ -9,14 +9,28 @@ class TblConstuctionError(Exception):
 class PyLuaTblParser:
     def __init__(self):
         self.string = ""
+        self.dict = None
 
     def load(self, s):
         self.string = s
-        p = self.skip(s, 0)
-        ret = self.__get_lua_table(self.string, p)
+        p = self.__skip(s, 0)
+        self.dict = self.__get_lua_table(self.string, p)
+
+    def loadLuaTable(self, f):
+        try:
+            file = open(f)
+            s = file.read()
+            self.load(s)
+            file.close()
+        except IOError as e:
+            raise e
+
+    def dumpDict(self):
+        ret_dict = {}
+
 
     @staticmethod
-    def check_pos(s, begin):
+    def __check_pos(s, begin):
         # 检查begin是否超出字符串s的最后一个字符位置
         # 每次调用可能会导致begin指针越界的行为后调用
         # （包括 +=, skip, get_comment, get_number, get_variable, get_value, get_lua_table, get_str)
@@ -24,7 +38,7 @@ class PyLuaTblParser:
             raise TblConstuctionError
 
     @staticmethod
-    def get_lua_table(s, begin):
+    def __get_lua_table(s, begin):
         # precondition string[begin]=='{'
         # 返回(t,end)
         # t表示得到的，从begin开始的lua表 -- 该表必然存在，否则抛出异常
@@ -37,43 +51,43 @@ class PyLuaTblParser:
         count = 1
         p = begin+1
         while True:                 # 每轮p递增的数量由具体情况决定
-            p = PyLuaTblParser.skip(s, p)        # 遇到第一个有效字符
-            PyLuaTblParser.check_pos(s, p)
+            p = PyLuaTblParser.__skip(s, p)        # 遇到第一个有效字符
+            PyLuaTblParser.__check_pos(s, p)
             if s[p] == ',' or s[p] == ';':                  # 分隔符
                 if array.__len__() == 0 and table.__len__() == 0:       # 尚未得到第一个元素
                     raise TblConstuctionError
-                p = PyLuaTblParser.skip(s, p+1)
-                PyLuaTblParser.check_pos(s, p)
+                p = PyLuaTblParser.__skip(s, p + 1)
+                PyLuaTblParser.__check_pos(s, p)
             if s[p] == '}':
                 return (array, p+1) if is_list else (table, p+1)
             elif s[p] == '{':        # 递归地构造表
-                ret_tbl, p = PyLuaTblParser.get_lua_table(s, p)
-                PyLuaTblParser.check_pos(s, p)
+                ret_tbl, p = PyLuaTblParser.__get_lua_table(s, p)
+                PyLuaTblParser.__check_pos(s, p)
                 if is_list:
                     array.append(ret_tbl)
                 else:
                     table[count] = ret_tbl
                     count += 1
             elif s[p] == '\'' or s[p] == '\"':        # (value)string，做key值时需外加方括号[]，或去除引号
-                ret_s, p = PyLuaTblParser.get_str(s, p)
-                PyLuaTblParser.check_pos(s, p)
+                ret_s, p = PyLuaTblParser.__get_str(s, p)
+                PyLuaTblParser.__check_pos(s, p)
                 if is_list:
                     array.append(ret_s)
                 else:
                     table[count] = ret_s
                     count += 1
             elif s[p] in "-.0123456789":        # (value)number，做key值时需外加方括号[]
-                ret_num, p = PyLuaTblParser.get_number(s, p)
-                PyLuaTblParser.check_pos(s, p)
+                ret_num, p = PyLuaTblParser.__get_number(s, p)
+                PyLuaTblParser.__check_pos(s, p)
                 if is_list:
                     array.append(ret_num)
                 else:
                     table[count] = ret_num
                     count += 1
             elif s[p] == '_' or s[p].isalpha():
-                ret_var, p = PyLuaTblParser.get_variable(s, p)
-                PyLuaTblParser.check_pos(s, p)
-                is_normal, ret_var = PyLuaTblParser.check_variable(ret_var)
+                ret_var, p = PyLuaTblParser.__get_variable(s, p)
+                PyLuaTblParser.__check_pos(s, p)
+                is_normal, ret_var = PyLuaTblParser.__check_variable(ret_var)
                 # key cannot be a boolean or None type, must be a value
                 if not is_normal:
                     if is_list:
@@ -82,48 +96,48 @@ class PyLuaTblParser:
                         table[count] = ret_var
                         count += 1
                 else:
-                    p = PyLuaTblParser.skip(s, p)
-                    PyLuaTblParser.check_pos(s, p)
+                    p = PyLuaTblParser.__skip(s, p)
+                    PyLuaTblParser.__check_pos(s, p)
                     if s[p] == "=":     # is a k-v pair
-                        p = PyLuaTblParser.skip(s, p+1)     # +1 to skip =
-                        PyLuaTblParser.check_pos(s, p)
-                        value, p = PyLuaTblParser.get_value(s, p)
-                        PyLuaTblParser.check_pos(s, p)
+                        p = PyLuaTblParser.__skip(s, p + 1)     # +1 to skip =
+                        PyLuaTblParser.__check_pos(s, p)
+                        value, p = PyLuaTblParser.__get_value(s, p)
+                        PyLuaTblParser.__check_pos(s, p)
                         if is_list:
                             is_list = False
-                            count = PyLuaTblParser.list_to_dict(array, table)+1
+                            count = PyLuaTblParser.__list_to_dict(array, table) + 1
                         table[ret_var] = value
                     # else: it's a normal variable, treated as null value, ignore
             elif s[p] == '[':       # must be a k-v pair
                 p += 1
-                PyLuaTblParser.check_pos(s, p)
+                PyLuaTblParser.__check_pos(s, p)
                 key = None      # 用于接收返回的key
                 if s[p] in "-.0123456789":        # (key)number,
-                    key, p = PyLuaTblParser.get_number(s, p)
+                    key, p = PyLuaTblParser.__get_number(s, p)
                 elif s[p] == '\'' or s[p] =='\"':
-                    key, p = PyLuaTblParser.get_str(s, p)
+                    key, p = PyLuaTblParser.__get_str(s, p)
                 else:
                     raise TblConstuctionError
-                p = PyLuaTblParser.skip(s, p)       # skip spaces
-                PyLuaTblParser.check_pos(s, p)
+                p = PyLuaTblParser.__skip(s, p)       # skip spaces
+                PyLuaTblParser.__check_pos(s, p)
                 if s[p] != ']':
                     raise TblConstuctionError
-                p = PyLuaTblParser.skip(s, p+1)      # "+1" to skip ']'
-                PyLuaTblParser.check_pos(s, p)
+                p = PyLuaTblParser.__skip(s, p + 1)      # "+1" to skip ']'
+                PyLuaTblParser.__check_pos(s, p)
                 if s[p] != '=':
                     raise TblConstuctionError
-                p = PyLuaTblParser.skip(s, p+1)      # "+1" to skip '='
-                PyLuaTblParser.check_pos(s, p)
-                value, p = PyLuaTblParser.get_value(s, p)
+                p = PyLuaTblParser.__skip(s, p + 1)      # "+1" to skip '='
+                PyLuaTblParser.__check_pos(s, p)
+                value, p = PyLuaTblParser.__get_value(s, p)
                 if is_list:
                     is_list = False
-                    count = PyLuaTblParser.list_to_dict(array, table)+1
+                    count = PyLuaTblParser.__list_to_dict(array, table) + 1
                 table[key] = value
             else:
                 raise TblConstuctionError
 
     @staticmethod
-    def list_to_dict(li, di):   # pass test
+    def __list_to_dict(li, di):   # pass test
         # li, di分别为一个列表和一个 空的字典
         # 将li中元素按序复制到字典中（对象则复制其引用）
         # 返回元素的个数
@@ -133,25 +147,24 @@ class PyLuaTblParser:
             i += 1
         return i
 
-    # TODO test
     @staticmethod
-    def get_value(s, begin):
+    def __get_value(s, begin):
         # precondition: s[begin] is a valid character(skip the spacecharacters and comments)
         # return (e, p).
         # e is a legal value type(nil，bool，number，str，table)
         if s[begin] == '{':
-            return PyLuaTblParser.get_lua_table(s, begin)
+            return PyLuaTblParser.__get_lua_table(s, begin)
         elif s[begin] == "'" or s[begin] == '"':
-            return PyLuaTblParser.get_str(s, begin)
+            return PyLuaTblParser.__get_str(s, begin)
         elif s[begin] in "-.0123456789":
-            return PyLuaTblParser.get_number(s, begin)
+            return PyLuaTblParser.__get_number(s, begin)
         elif s[begin] == '_' or s[begin].isalpha():
-            var, p = PyLuaTblParser.get_variable(s, begin)
-            is_normal, ret_var = PyLuaTblParser.check_variable(var)
+            var, p = PyLuaTblParser.__get_variable(s, begin)
+            is_normal, ret_var = PyLuaTblParser.__check_variable(var)
             return (None, p)if is_normal else (ret_var, p)      # 未定义的变量将被视为None
 
     @staticmethod
-    def check_variable(var):
+    def __check_variable(var):
         # check if it's a boolean or NULL
         # return (is_normal, ret_var)。
         # is_normal为bool变量，为假表示var是一个bool变量或None变量。为真表示var是个普通字符串变量
@@ -165,7 +178,7 @@ class PyLuaTblParser:
             return True, var
 
     @staticmethod
-    def get_variable(s, begin):
+    def __get_variable(s, begin):
         # precondition:s[begin] in string.letters
         # return (var, p),var表示解析得到的字符串，p表示数字最后一个字符的后一个字符所在位置
         if not s[begin].isalpha() and s[begin] != '_':
@@ -178,19 +191,21 @@ class PyLuaTblParser:
         return s[begin: p], p
 
     @staticmethod
-    def get_number(s, begin):       # pass test
+    def __get_number(s, begin):       # pass test
         # precondition:s[begin] in '0123456789.-'
         # return (num, p),num表示解析得到的数字，p表示数字最后一个字符的后一个字符所在位置
         if s[begin] not in '-0.123456789':
             raise ValueError("cannot find digit character at the given position")
         p = begin+1
-        while p < s.__len__() and s[p] in '0.123456789':
+        while p < s.__len__() and s[p] in '-+0.123456789eE':
             p += 1
             if begin >= s.__len__():
                 break
         num_str = s[begin: p]
         try:
             f = float(num_str)
+            if "e" in num_str or "E" in num_str:
+                return f, p
             i = int(f)      # 不会抛出异常
             num = i if f == i else f
             return num, p
@@ -221,7 +236,7 @@ class PyLuaTblParser:
         return begin
 
     @staticmethod
-    def skip(s, begin):        # pass test
+    def __skip(s, begin):        # pass test
         # 从给定位置开始，跳过遇到的空格和注释
         # 返回跳过后的第一个有效字符的位置begin
         # 如果string[begin]就是非空格或注释，返回begin
@@ -238,7 +253,7 @@ class PyLuaTblParser:
         return begin
 
     @staticmethod
-    def get_str(s, begin):     # pass test
+    def __get_str(s, begin):     # pass test
         # precondition string[begin]='\'' or '"'，即字符开始的位置
         # 返回(s,p)。s表示引号内的字符串，p指向字符串后引号的下一个位置
         p = PyLuaTblParser.__get_quotation(s, begin)
@@ -252,7 +267,7 @@ class PyLuaTblParser:
         if s[begin] != '\'' and s[begin] != '\"':
             raise ValueError("cannot find start quotation at the given position")
         p = begin + 1
-        PyLuaTblParser.check_pos(s, p)
+        PyLuaTblParser.__check_pos(s, p)
         while not (s[begin] == s[p]):       # 遇到匹配的右引号跳出
             if p == s.__len__()-1:     # 最后一个字符，没有找到对应的后引号
                 raise TblConstuctionError("incorrect lua table construction")
@@ -280,6 +295,7 @@ class PyLuaTblParser:
 
 if __name__ == "__main__":
     f = open('./requirements')
+    s = '{array1 = {65,23,5,},dict = {mixed = {43,54.33,false,9,string = "value",},array = {3,6,4,},string = "value",},}'
     s = f.read()
-    c = PyLuaTblParser.get_lua_table(s, 0)
+    c = PyLuaTblParser.__get_lua_table(s, 0)
     print(c[0], c[1])

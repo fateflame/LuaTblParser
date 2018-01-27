@@ -7,6 +7,15 @@ class LuaError(Exception):
     def __str__(self):
         return self.error_mesg
 
+
+def fun(s):
+    s.replace('a', 'z')
+    print(s)
+    return s
+
+
 if __name__ == "__main__":
-    s= '{"array with 1 element",}'
-    print(s[1].isspace())
+    s = {1:"a", 2:"b"}
+    c = "ab"
+
+    print(fun(c), c)
