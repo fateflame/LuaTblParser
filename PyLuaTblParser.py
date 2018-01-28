@@ -1,3 +1,6 @@
+# coding=utf-8
+# 评语：dict key not find: 3  (type=dict, key or index=root)
+
 class TblConstuctionError(Exception):
     def __init__(self, s="incorrect lua table construction"):
         self.error_mesg = s
@@ -6,28 +9,141 @@ class TblConstuctionError(Exception):
         return self.error_mesg
 
 
+def copy_value(obj):
+    if type(obj) == list:
+        l = []
+        for e in obj:
+            l.append(copy_value(e))
+        return l
+    elif type(obj) == dict:
+        d = {}
+        for k, v in obj.iteritems():
+            d[k] = copy_value(v)
+        return d
+    else:
+        return obj
+
+
+def list_to_dict(li, di):   # pass test
+    # li, di分别为一个列表和一个 空的字典
+    # 将li中元素按序复制到字典中（对象则复制其引用）
+    #  返回元素的个数
+    i = 1
+    for e in li:
+        if e is None:       # 在dict中忽略值为None的项
+            continue
+        di[i] = e
+        i += 1
+    return i
+
+
+def to_string(obj):
+    if obj == None:
+        return "nil"
+    elif type(obj) == dict:
+        return dict_tostring(obj)
+    elif type(obj) == list:
+        return list_tostring(obj)
+    elif type(obj) == bool:
+        return bool_tostring(obj)
+    elif type(obj) in [int, float, long]:
+        return number_tostring(obj)
+    elif type(obj) in [str, unicode]:
+        return str_tostring(obj)
+    else:
+        raise TypeError("unknown type")
+
+
+def dict_tostring(obj):
+    s = "{"
+    for k, v in obj.iteritems():
+        s += "["+to_string(k)+"] = "+to_string(v)+","
+    return s+"}"
+
+
+def list_tostring(obj):
+    s = "{"
+    for e in obj:
+        s += to_string(e) + ","
+    return s+"}"
+
+
+
+def bool_tostring(obj):
+    # 将bool型变量转换为字符串
+    return "true" if obj else "false"
+
+
+def number_tostring(obj):
+    return str(obj)
+
+
+def str_tostring(obj):
+    s = obj.replace('\\', '\\\\')
+    s = s.replace("'", "\\'")
+    s = s.replace('"', '\\"')
+    s = s.replace("\b", "\\b")
+    s = s.replace("\000", "\\000")
+    s = s.replace("\n", "\\n")
+    s = s.replace("\v", "\\v")
+    s = s.replace("\t", "\\t")
+    s = s.replace("\r", "\\r")
+    s = s.replace("\f", "\\f")
+    return '"' + s + '"'
+
+
 class PyLuaTblParser:
     def __init__(self):
         self.string = ""
-        self.dict = None
+        self.dict = {}
 
     def load(self, s):
         self.string = s
         p = self.__skip(s, 0)
-        self.dict = self.__get_lua_table(self.string, p)
+        self.dict = self.__get_lua_table(self.string, p)[0]
+
+    # TODO
+    def dump(self):
+        # 根据类中数据返回Lua table字符串
+        return to_string(self.dict)
 
     def loadLuaTable(self, f):
+        # 从文件中读取Lua table字符串，f为文件路径，异常处理同1，文件操作失败抛出异常；
         try:
-            file = open(f)
+            file = open(f, 'r')
             s = file.read()
+            file.close()
             self.load(s)
+        except IOError as e:
+            raise e
+
+    def dumpLuaTable(self, f):
+        # 将类中的内容以Lua table格式存入文件，f为文件路径，文件若存在则覆盖，文件操作失败抛出异常；
+        try:
+            file = open(f, 'w')
+            file.write(self.dump())
             file.close()
         except IOError as e:
             raise e
 
-    def dumpDict(self):
-        ret_dict = {}
+    def loadDict(self, d):
+        if type(d) == dict:
+            temp_dict = {}
+            for k, v in d.iteritems():
+                if type(k) in [int, float, long, str]:      # keys type is only str or number
+                    temp_dict[k] = copy_value(v)
+            self.dict = temp_dict
+        elif type(d) == list:
+            temp_dict = []
+            for v in d:
+                temp_dict.append(copy_value(v))
+            self.dict = temp_dict
+        else:
+            raise TypeError("cannot transfrom a non-dict/list object to lua-table")
 
+    def dumpDict(self):
+        # 返回一个dict，包含类中的数据
+        return copy_value(self.dict)
 
     @staticmethod
     def __check_pos(s, begin):
@@ -93,8 +209,9 @@ class PyLuaTblParser:
                     if is_list:
                         array.append(ret_var)
                     else:
-                        table[count] = ret_var
-                        count += 1
+                        if ret_var:     # not None, dict中忽略key为None的项
+                            table[count] = ret_var
+                            count += 1
                 else:
                     p = PyLuaTblParser.__skip(s, p)
                     PyLuaTblParser.__check_pos(s, p)
@@ -102,10 +219,11 @@ class PyLuaTblParser:
                         p = PyLuaTblParser.__skip(s, p + 1)     # +1 to skip =
                         PyLuaTblParser.__check_pos(s, p)
                         value, p = PyLuaTblParser.__get_value(s, p)
-                        PyLuaTblParser.__check_pos(s, p)
+                        if not value:       # ==None
+                            continue        # ignore
                         if is_list:
                             is_list = False
-                            count = PyLuaTblParser.__list_to_dict(array, table) + 1
+                            count = list_to_dict(array, table) + 1
                         table[ret_var] = value
                     # else: it's a normal variable, treated as null value, ignore
             elif s[p] == '[':       # must be a k-v pair
@@ -129,23 +247,14 @@ class PyLuaTblParser:
                 p = PyLuaTblParser.__skip(s, p + 1)      # "+1" to skip '='
                 PyLuaTblParser.__check_pos(s, p)
                 value, p = PyLuaTblParser.__get_value(s, p)
+                if not value:           # ==None
+                    continue
                 if is_list:
                     is_list = False
-                    count = PyLuaTblParser.__list_to_dict(array, table) + 1
+                    count = list_to_dict(array, table) + 1
                 table[key] = value
             else:
                 raise TblConstuctionError
-
-    @staticmethod
-    def __list_to_dict(li, di):   # pass test
-        # li, di分别为一个列表和一个 空的字典
-        # 将li中元素按序复制到字典中（对象则复制其引用）
-        # 返回元素的个数
-        i = 1
-        for e in li:
-            di[i] = e
-            i += 1
-        return i
 
     @staticmethod
     def __get_value(s, begin):
@@ -294,8 +403,18 @@ class PyLuaTblParser:
 
 
 if __name__ == "__main__":
-    f = open('./requirements')
-    s = '{array1 = {65,23,5,},dict = {mixed = {43,54.33,false,9,string = "value",},array = {3,6,4,},string = "value",},}'
-    s = f.read()
-    c = PyLuaTblParser.__get_lua_table(s, 0)
-    print(c[0], c[1])
+    a1 = PyLuaTblParser()
+    a2 = PyLuaTblParser()
+    a3 = PyLuaTblParser()
+    file_path = "./requirements"
+    f = open('./case.lua')
+    test_str = f.read()
+    f.close()
+    a1.load(test_str)
+    d1 = a1.dumpDict()
+
+    a2.loadDict(d1)
+    a2.dumpLuaTable(file_path)
+    a3.loadLuaTable(file_path)
+
+    d3 = a3.dumpDict()

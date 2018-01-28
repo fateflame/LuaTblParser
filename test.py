@@ -1,5 +1,3 @@
-import re
-import string
 class LuaError(Exception):
     def __init__(self, s):
         self.error_mesg = s
@@ -8,14 +6,21 @@ class LuaError(Exception):
         return self.error_mesg
 
 
-def fun(s):
-    s.replace('a', 'z')
-    print(s)
-    return s
+def fun1(s):
+    print (s,1)
+
+def fun2(s):
+    print (s, 2)
+
+def to_string(obj):
+    func_dict = {
+        dict: fun1,
+        list: fun2
+    }
+    func_dict[type(obj)](obj)
 
 
 if __name__ == "__main__":
-    s = {1:"a", 2:"b"}
-    c = "ab"
+    s =None
+    print (s == None)
 
-    print(fun(c), c)
