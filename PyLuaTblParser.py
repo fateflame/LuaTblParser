@@ -31,6 +31,7 @@ def list_to_dict(li, di):   # pass test
     i = 1
     for e in li:
         if e is None:       # 在dict中忽略值为None的项
+            i += 1
             continue
         di[i] = e
         i += 1
@@ -75,7 +76,7 @@ def bool_tostring(obj):
 
 
 def number_tostring(obj):
-    return str(obj)
+    return str(obj.__repr__())
 
 
 def str_tostring(obj):
@@ -94,15 +95,22 @@ def str_tostring(obj):
 
 class PyLuaTblParser:
     def __init__(self):
-        self.string = ""
         self.dict = {}
+
+    def __getitem__(self, item):        # 用于[]下标访问
+        return self.dict[item]
+
+    def __setitem__(self, key, value):      # 用于[]下标写入
+        self.dict[key]=value
+
+    def update(self, d):
+        self.dict.update(d)
 
     def load(self, s):
         self.string = s
         p = self.__skip(s, 0)
         self.dict = self.__get_lua_table(self.string, p)[0]
 
-    # TODO
     def dump(self):
         # 根据类中数据返回Lua table字符串
         return to_string(self.dict)
@@ -209,9 +217,9 @@ class PyLuaTblParser:
                     if is_list:
                         array.append(ret_var)
                     else:
-                        if ret_var:     # not None, dict中忽略key为None的项
+                        if ret_var != None:     # not None, dict中忽略key为None的项
                             table[count] = ret_var
-                            count += 1
+                        count += 1
                 else:
                     p = PyLuaTblParser.__skip(s, p)
                     PyLuaTblParser.__check_pos(s, p)
@@ -219,11 +227,12 @@ class PyLuaTblParser:
                         p = PyLuaTblParser.__skip(s, p + 1)     # +1 to skip =
                         PyLuaTblParser.__check_pos(s, p)
                         value, p = PyLuaTblParser.__get_value(s, p)
-                        if not value:       # ==None
+                        if value == None:       # ==None，区别于False
+                            count += 1
                             continue        # ignore
                         if is_list:
                             is_list = False
-                            count = list_to_dict(array, table) + 1
+                            count = list_to_dict(array, table)
                         table[ret_var] = value
                     # else: it's a normal variable, treated as null value, ignore
             elif s[p] == '[':       # must be a k-v pair
@@ -247,11 +256,12 @@ class PyLuaTblParser:
                 p = PyLuaTblParser.__skip(s, p + 1)      # "+1" to skip '='
                 PyLuaTblParser.__check_pos(s, p)
                 value, p = PyLuaTblParser.__get_value(s, p)
-                if not value:           # ==None
+                if value == None:           # ==None
+                    count+=1
                     continue
                 if is_list:
                     is_list = False
-                    count = list_to_dict(array, table) + 1
+                    count = list_to_dict(array, table)
                 table[key] = value
             else:
                 raise TblConstuctionError
@@ -306,19 +316,14 @@ class PyLuaTblParser:
         if s[begin] not in '-0.123456789':
             raise ValueError("cannot find digit character at the given position")
         p = begin+1
-        while p < s.__len__() and s[p] in '-+0.123456789eE':
+        while p < s.__len__() and s[p] in '-+x0.123456789abcdefABCDEF':
             p += 1
             if begin >= s.__len__():
                 break
         num_str = s[begin: p]
         try:
-            f = float(num_str)
-            if "e" in num_str or "E" in num_str:
-                return f, p
-            i = int(f)      # 不会抛出异常
-            num = i if f == i else f
-            return num, p
-        except ValueError as e:
+            return eval(num_str), p
+        except SyntaxError as e:
             raise TblConstuctionError(e.__str__())
 
     @staticmethod
@@ -402,19 +407,35 @@ class PyLuaTblParser:
         return s
 
 
+def check_table(d):
+    for k,v in d.iteritems():
+        if type(v) == dict:
+            check_table(v)
+        else:
+            if v == None:
+                print "None Error"
+
+
 if __name__ == "__main__":
     a1 = PyLuaTblParser()
     a2 = PyLuaTblParser()
     a3 = PyLuaTblParser()
     file_path = "./requirements"
-    f = open('./case.lua')
-    test_str = f.read()
+    f = open('./LuaTableParser_testcase/testcase.lua')
+    test_str = "{k='K', nil, 2, a='A'}"
     f.close()
     a1.load(test_str)
     d1 = a1.dumpDict()
+
 
     a2.loadDict(d1)
     a2.dumpLuaTable(file_path)
     a3.loadLuaTable(file_path)
 
     d3 = a3.dumpDict()
+
+    print d3 == a1.dict
+    check_table(d3)
+
+
+
